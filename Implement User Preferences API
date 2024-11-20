@@ -1,0 +1,120 @@
+@Schema()
+export class NotificationLog extends Document {
+  @Prop({ required: true })
+  userId: string;
+
+  @Prop({ required: true, enum: ['marketing', 'newsletter', 'updates'] })
+  type: string;
+
+  @Prop({ required: true, enum: ['email', 'sms', 'push'] })
+  channel: string;
+
+  @Prop({ required: true, enum: ['pending', 'sent', 'failed'] })
+  status: string;
+
+  @Prop()
+  sentAt?: Date;
+
+  @Prop()
+  failureReason?: string;
+
+  @Prop({ type: Object, default: {} })
+  metadata: Record<string, any>;
+}
+
+export const NotificationLogSchema = SchemaFactory.createForClass(NotificationLog);
+
+
+import { Controller, Post, Get, Patch, Delete, Param, Body } from '@nestjs/common';
+import { PreferencesService } from './preferences.service';
+import { UserPreference } from './schemas/user-preference.schema';
+
+@Controller('api/preferences')
+export class PreferencesController {
+  constructor(private readonly preferencesService: PreferencesService) {}
+
+  @Post()
+  create(@Body() data: UserPreference) {
+    return this.preferencesService.create(data);
+  }
+
+  @Get(':userId')
+  findOne(@Param('userId') userId: string) {
+    return this.preferencesService.findOne(userId);
+  }
+
+  @Patch(':userId')
+  update(@Param('userId') userId: string, @Body() data: Partial<UserPreference>) {
+    return this.preferencesService.update(userId, data);
+  }
+
+  @Delete(':userId')
+  remove(@Param('userId') userId: string) {
+    return this.preferencesService.delete(userId);
+  }
+}
+
+
+@Injectable()
+export class NotificationsService {
+  constructor(
+    @InjectModel(NotificationLog.name) private readonly logModel: Model<NotificationLog>,
+  ) {}
+
+  async sendNotification(data: any): Promise<NotificationLog> {
+    const log = new this.logModel({
+      ...data,
+      status: 'pending',
+      sentAt: new Date(),
+    });
+
+    // Simulate sending logic
+    try {
+      log.status = 'sent';
+    } catch (err) {
+      log.status = 'failed';
+      log.failureReason = err.message;
+    }
+    return log.save();
+  }
+}
+
+
+@Controller('api/notifications')
+export class NotificationsController {
+  constructor(private readonly notificationsService: NotificationsService) {}
+
+  @Post('send')
+  send(@Body() data: any) {
+    return this.notificationsService.sendNotification(data);
+  }
+
+  @Get(':userId/logs')
+  getLogs(@Param('userId') userId: string) {
+    return this.notificationsService.getLogs(userId);
+  }
+}
+
+
+import { Test, TestingModule } from '@nestjs/testing';
+import { PreferencesService } from './preferences.service';
+import { getModelToken } from '@nestjs/mongoose';
+
+describe('PreferencesService', () => {
+  let service: PreferencesService;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PreferencesService,
+        { provide: getModelToken('UserPreference'), useValue: {} },
+      ],
+    }).compile();
+
+    service = module.get<PreferencesService>(PreferencesService);
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+});
